@@ -389,6 +389,7 @@
 
     <projectService serviceImplementation="com.intellij.plugins.haxe.haxelib.definitions.HaxeDefineDetectionManager"/>
     <projectService serviceImplementation="com.intellij.plugins.haxe.config.HaxeProjectSettings"/>
+    <projectService serviceImplementation="com.intellij.plugins.haxe.compilation.server.HaxeCompilationServerService"/>
     <projectService serviceImplementation="com.intellij.plugins.haxe.lang.psi.HaxeClassResolveCache"/>
 
     <projectService serviceImplementation="com.intellij.plugins.haxe.ide.documentation.HaxeDocumentationRenderer"/>
@@ -601,6 +602,7 @@
     <postStartupActivity implementation="com.intellij.plugins.haxe.haxelib.HaxelibProjectStartActivity"/>
 
     <notificationGroup id="haxe.haxelib.warning" displayType="BALLOON" bundle="messages.HaxeBundle" key="haxe.haxelib.library.dependencies"/>
+    <notificationGroup id="haxe.compilation.server" displayType="BALLOON" bundle="messages.HaxeBundle" key="haxe.compilation.server.notification.group"/>
 
 
     <vfs.asyncListener implementation="com.intellij.plugins.haxe.lang.psi.stubs.HaxeStubableFileService"/>
@@ -683,9 +685,25 @@
     </action>
 
 
+    <action id="Haxe.compilation.server.restart"
+            class="com.intellij.plugins.haxe.ide.actions.compilation.HaxeRestartCompilationServerAction"
+            text="Restart Haxe Compilation Server"
+            description="Stops the compilation server so the next build starts a fresh one. Use this when build macros have left stale output."
+            icon="AllIcons.Actions.Restart">
+    </action>
+
+    <action id="Haxe.compilation.server.copy-port"
+            class="com.intellij.plugins.haxe.ide.actions.compilation.HaxeCopyCompilationServerPortAction"
+            text="Copy Haxe Compilation Server Port"
+            description="Copies the port of the running compilation server, for pointing a terminal build at the same server."
+            icon="AllIcons.Actions.Copy">
+    </action>
+
     <group id="Haxe.projectUtils" icon="HaxeIcons.HAXE_LOGO" popup="true"  text="Haxe" class="com.intellij.plugins.haxe.ide.actions.haxelib.HaxeActionGroup">
       <reference ref="Haxe.project.sync-libs"/>
       <reference ref="Haxe.haxlib.update-cache"/>
+      <reference ref="Haxe.compilation.server.restart"/>
+      <reference ref="Haxe.compilation.server.copy-port"/>
       <add-to-group group-id="ProjectViewPopupMenu"/>
       <add-to-group group-id="EditorPopupMenu"/>
     </group>

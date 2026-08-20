@@ -33,6 +33,7 @@ import com.intellij.util.BooleanValueHolder;
 import com.intellij.util.PathUtil;
 import com.intellij.util.text.StringTokenizer;
 import org.jetbrains.annotations.NotNull;
+import org.jetbrains.annotations.Nullable;
 import org.jetbrains.annotations.PropertyKey;
 
 import java.io.File;
@@ -90,6 +91,16 @@ public class HaxeCommonCompilerUtil {
     HaxeTarget getHaxeTarget();
 
     String getModuleDirPath();
+
+    /**
+     * Address of a Haxe compilation server to compile through, as {@code host:port}, or null
+     * to spawn a cold compiler as before.
+     *
+     * Only consulted while a command line is being generated, so asking for an output path
+     * never has the side effect of starting a server.
+     */
+    @Nullable
+    String getCompilationServerAddress();
   }
 
   private static final Logger LOG = Logger.getInstance("#HaxeCommonCompilerUtil");
@@ -328,7 +339,9 @@ public class HaxeCommonCompilerUtil {
   }
 
 
-  private static List<List<String>> generateCommandLines(CompilationContext context) {
+  // Package private rather than private so HaxeCompilationServerCommandLineTest can check
+  // where --connect lands without spinning up a project fixture.
+  static List<List<String>> generateCommandLines(CompilationContext context) {
     List<List<String>> clList = new ArrayList<List<String>>();
     HaxeModuleSettingsBase settings = context.getModuleSettings();
 
@@ -349,11 +362,28 @@ public class HaxeCommonCompilerUtil {
   }
 
 
+  /**
+   * Route this command line through a compilation server when one is available.
+   *
+   * {@code --connect} is position independent and is honoured even when it arrives from inside an
+   * hxml, but it is added up front so it is obvious in the command line echoed to the Build window.
+   * The client prepends {@code --cwd} to the forwarded request, so relative paths in the build
+   * config still resolve against the working directory.
+   */
+  private static void addCompilationServerArgs(List<String> commandLine, CompilationContext context) {
+    String address = context.getCompilationServerAddress();
+    if (address != null && !address.isEmpty()) {
+      commandLine.add("--connect");
+      commandLine.add(address);
+    }
+  }
+
   private static List<String> generateHxmlCommand(CompilationContext context) {
 
     final List<String> commandLine = new ArrayList<String>();
     final String sdkExePath = HaxeSdkUtilBase.getCompilerPathByFolderPath(context.getSdkHomePath());
     commandLine.add(sdkExePath);
+    addCompilationServerArgs(commandLine, context);
 
     String hxmlPath = context.getModuleSettings().getHxmlPath();
     commandLine.add(FileUtil.toSystemDependentName(hxmlPath));
@@ -370,7 +400,7 @@ public class HaxeCommonCompilerUtil {
     final List<String> commandLine = new ArrayList<String>();
     final String sdkExePath = HaxeSdkUtilBase.getCompilerPathByFolderPath(context.getSdkHomePath());
     commandLine.add(sdkExePath);
-
+    addCompilationServerArgs(commandLine, context);
 
     final HaxeModuleSettingsBase settings = context.getModuleSettings();
     commandLine.add("-main");

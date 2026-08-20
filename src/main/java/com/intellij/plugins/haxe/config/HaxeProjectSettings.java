@@ -44,9 +44,17 @@ public class HaxeProjectSettings implements PersistentStateComponent<Element>, H
   public static final String DEFINES = "defines";
   public static final String AUTO_DETECT_DEFINES = "auto_detect_defines";
   public static final String AUTO_DETECT_REFERENCES = "auto_detect_references";
+  public static final String USE_COMPILATION_SERVER = "use_compilation_server";
+  public static final String COMPILATION_SERVER_PORT = "compilation_server_port";
+
+  /** A port of 0 means "pick a free one", which is what keeps side-by-side worktrees independent. */
+  public static final int COMPILATION_SERVER_PORT_AUTO = 0;
+
   private String userCompilerDefinitions = "";
   private boolean autoDetectDefinitions = true;
   private boolean detectCodeReferencesInConsole = true;
+  private boolean useCompilationServer = false;
+  private int compilationServerPort = COMPILATION_SERVER_PORT_AUTO;
   private HaxeModificationTracker tracker = new HaxeModificationTracker(getClass().getName());
 
   public Set<String> getUserCompilerDefinitionsAsSet() {
@@ -101,7 +109,24 @@ public class HaxeProjectSettings implements PersistentStateComponent<Element>, H
     autoDetectDefinitions = Optional.ofNullable(defines).map(Boolean::parseBoolean).orElse(true);
     detectCodeReferencesInConsole= Optional.ofNullable(references).map(Boolean::parseBoolean).orElse(true);
 
+    useCompilationServer = Optional.ofNullable(state.getAttributeValue(USE_COMPILATION_SERVER))
+      .map(Boolean::parseBoolean).orElse(false);
+    compilationServerPort = parsePort(state.getAttributeValue(COMPILATION_SERVER_PORT));
+
     tracker.notifyUpdated();
+  }
+
+  private static int parsePort(String value) {
+    if (value == null || value.isEmpty()) {
+      return COMPILATION_SERVER_PORT_AUTO;
+    }
+    try {
+      int port = Integer.parseInt(value.trim());
+      return port > 0 && port <= 65535 ? port : COMPILATION_SERVER_PORT_AUTO;
+    }
+    catch (NumberFormatException e) {
+      return COMPILATION_SERVER_PORT_AUTO;
+    }
   }
 
   @Override
@@ -110,6 +135,8 @@ public class HaxeProjectSettings implements PersistentStateComponent<Element>, H
     element.setAttribute(DEFINES, userCompilerDefinitions);
     element.setAttribute(AUTO_DETECT_DEFINES, String.valueOf(autoDetectDefinitions));
     element.setAttribute(AUTO_DETECT_REFERENCES, String.valueOf(detectCodeReferencesInConsole));
+    element.setAttribute(USE_COMPILATION_SERVER, String.valueOf(useCompilationServer));
+    element.setAttribute(COMPILATION_SERVER_PORT, String.valueOf(compilationServerPort));
     return element;
   }
 
@@ -128,13 +155,40 @@ public class HaxeProjectSettings implements PersistentStateComponent<Element>, H
   }
 
   public void setAutoDetectDefinitions(boolean selected) {
-    detectCodeReferencesInConsole = selected;
+    autoDetectDefinitions = selected;
   }
   public boolean getDetectCodeReferencesInConsole() {
-    return autoDetectDefinitions;
+    return detectCodeReferencesInConsole;
   }
 
   public void setDetectCodeReferencesInConsole(boolean selected) {
     detectCodeReferencesInConsole = selected;
+  }
+
+  /**
+   * Whether builds and compiler completion go through a warm Haxe compilation server instead of
+   * spawning a cold compiler each time.
+   */
+  public boolean isUseCompilationServer() {
+    return useCompilationServer;
+  }
+
+  public void setUseCompilationServer(boolean useCompilationServer) {
+    this.useCompilationServer = useCompilationServer;
+    tracker.notifyUpdated();
+  }
+
+  /**
+   * Port the compilation server listens on, or {@link #COMPILATION_SERVER_PORT_AUTO} to have a free
+   * one picked at start.  Auto is the default so that several worktrees open at once cannot collide
+   * on a port, or worse, silently share one server.
+   */
+  public int getCompilationServerPort() {
+    return compilationServerPort;
+  }
+
+  public void setCompilationServerPort(int compilationServerPort) {
+    this.compilationServerPort = compilationServerPort > 0 ? compilationServerPort : COMPILATION_SERVER_PORT_AUTO;
+    tracker.notifyUpdated();
   }
 }

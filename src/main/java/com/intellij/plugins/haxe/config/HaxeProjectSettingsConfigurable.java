@@ -21,6 +21,7 @@ import com.intellij.openapi.options.ConfigurationException;
 import com.intellij.openapi.options.SearchableConfigurable;
 import com.intellij.openapi.project.Project;
 import com.intellij.plugins.haxe.HaxeBundle;
+import com.intellij.plugins.haxe.compilation.server.HaxeCompilationServerService;
 import com.intellij.plugins.haxe.config.ui.HaxeProjectSettingsForm;
 import com.intellij.plugins.haxe.util.HaxeUtil;
 import org.jetbrains.annotations.NotNull;
@@ -66,7 +67,14 @@ public class HaxeProjectSettingsConfigurable implements SearchableConfigurable {
   public void apply() throws ConfigurationException {
     if (mySettingsPane != null) {
       final boolean modified = isModified();
+      // Checked before the settings are written, since it compares the form against them.
+      final boolean serverSettingsModified = mySettingsPane.isCompilationServerModified(getSettings());
       mySettingsPane.applyEditorTo(getSettings());
+      if (serverSettingsModified) {
+        // Turning the server off, or moving it to another port, has to take effect now rather than
+        // leaving a process behind on the old settings.
+        HaxeCompilationServerService.getInstance(myProject).restart();
+      }
       if (modified) {
         HaxeUtil.reparseProjectFiles(myProject);
       }

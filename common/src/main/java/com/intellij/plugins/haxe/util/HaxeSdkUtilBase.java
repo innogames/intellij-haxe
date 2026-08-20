@@ -30,6 +30,7 @@ import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
 import java.io.File;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
@@ -104,32 +105,65 @@ public class HaxeSdkUtilBase {
     return null;
   }
 
+  /**
+   * Directories to put in front of PATH for a Haxe SDK, highest priority first.
+   *
+   * The configured haxelib deliberately comes before the SDK home.  The compiler resolves
+   * {@code -lib} by running whichever {@code haxelib} it finds on PATH, and a stock {@code haxelib}
+   * always sits in the SDK home, so with the SDK home first the SDK's "haxelib path" setting could
+   * never take effect for compiler invocations.  Projects that resolve their libraries through a
+   * haxelib shim rather than the stock one - lix in scoped mode, for instance - need the configured
+   * haxelib to win.  With the default that SDK detection writes ({@code <sdkHome>/haxelib}) both
+   * entries name the same directory and the result is the same PATH as always.
+   *
+   * @param haxeSdkData SDK whose directories are wanted.
+   * @return directories in system independent form, without duplicates.
+   */
+  @NotNull
+  private static List<String> getPathEntries(@NotNull HaxeSdkAdditionalDataBase haxeSdkData) {
+    final List<String> entries = new ArrayList<>();
+    addPathEntry(entries, getContainingDirectory(haxeSdkData.getHaxelibPath()));
+    addPathEntry(entries, haxeSdkData.getHomePath());
+    addPathEntry(entries, getContainingDirectory(haxeSdkData.getNekoBinPath()));
+    return entries;
+  }
+
+  private static void addPathEntry(@NotNull List<String> entries, @Nullable String directory) {
+    if (directory == null || directory.isEmpty()) {
+      return;
+    }
+    for (String entry : entries) {
+      if (FileUtil.pathsEqual(entry, directory)) {
+        return;
+      }
+    }
+    entries.add(directory);
+  }
+
+  /**
+   * @return the directory holding the given executable, or null when there is nothing to add to
+   * PATH: the setting is not filled in, or it is a bare command name with no directory part.
+   */
+  @Nullable
+  private static String getContainingDirectory(@Nullable String executablePath) {
+    if (executablePath == null || executablePath.isEmpty()) {
+      return null;
+    }
+    final String parent = new File(FileUtil.toSystemDependentName(executablePath)).getParent();
+    return parent == null ? null : FileUtil.toSystemIndependentName(parent);
+  }
+
   @NotNull
   private static String getEnvironmentPathPatch(@Nullable HaxeSdkAdditionalDataBase haxeSdkData) {
-    String result = "";
-    String pathsep = SystemInfo.isWindows ? ";" : ":";
-    if(haxeSdkData != null) {
-      final String sdkHome = haxeSdkData.getHomePath();
-      final String haxelibBin = haxeSdkData.getHaxelibPath();
-      final String nekoBin = haxeSdkData.getNekoBinPath();
-
-      if(sdkHome != null && !sdkHome.isEmpty()) {
-        result += sdkHome;
-      }
-      else if(haxelibBin != null && !haxelibBin.isEmpty()) {
-        // fallback to haxelib path
-        final File f = new File(haxelibBin);
-        result += f.getParent();
-      }
-
-
-      if (nekoBin != null && !nekoBin.isEmpty()) {
-        final File f = new File(nekoBin);
-        result += pathsep + f.getParent();
-      }
-      result += pathsep;
+    if (haxeSdkData == null) {
+      return "";
     }
-    return result;
+    final List<String> entries = getPathEntries(haxeSdkData);
+    if (entries.isEmpty()) {
+      return "";
+    }
+    final String pathsep = SystemInfo.isWindows ? ";" : ":";
+    return String.join(pathsep, entries) + pathsep;
   }
 
   @NotNull
