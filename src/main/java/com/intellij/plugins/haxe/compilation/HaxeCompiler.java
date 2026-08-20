@@ -41,6 +41,7 @@ import com.intellij.openapi.vfs.VirtualFile;
 import com.intellij.openapi.vfs.newvfs.impl.FakeVirtualFile;
 import com.intellij.plugins.haxe.HaxeBundle;
 import com.intellij.plugins.haxe.config.HaxeTarget;
+import com.intellij.plugins.haxe.compilation.server.HaxeCompilationServerService;
 import com.intellij.plugins.haxe.config.sdk.HaxeSdkAdditionalDataBase;
 import com.intellij.plugins.haxe.ide.module.HaxeModuleSettings;
 import com.intellij.plugins.haxe.ide.module.HaxeModuleType;
@@ -51,6 +52,7 @@ import com.intellij.plugins.haxe.util.HaxeCommonCompilerUtil;
 import com.intellij.plugins.haxe.util.HaxeSdkUtilBase;
 import lombok.CustomLog;
 import org.jetbrains.annotations.NotNull;
+import org.jetbrains.annotations.Nullable;
 
 import java.io.DataInput;
 import java.io.IOException;
@@ -213,6 +215,10 @@ public class HaxeCompiler implements FileProcessingCompiler {
 
     return new HaxeCommonCompilerUtil.CompilationContext() {
       private String myErrorRoot;
+      // Resolved at most once per build, so a multi-command build does not health-check repeatedly
+      // and a failure is reported a single time.
+      private String myServerAddress;
+      private boolean myServerAddressResolved;
 
       @Override
       public HaxeSdkAdditionalDataBase getHaxeSdkData() {
@@ -356,6 +362,20 @@ public class HaxeCompiler implements FileProcessingCompiler {
       @Override
       public String getModuleDirPath() {
         return ProjectUtil.guessModuleDir(module).getCanonicalPath();
+      }
+
+      @Nullable
+      @Override
+      public String getCompilationServerAddress() {
+        if (!myServerAddressResolved) {
+          myServerAddressResolved = true;
+          // warningHandler, never errorHandler: an error-category message fails the whole build,
+          // which would report a successful fallback compile as a failure.  A warning puts the
+          // reason in the Build window where it will be seen, and the build carries on cold.
+          myServerAddress = HaxeCompilationServerService.getInstance(module.getProject())
+            .resolveAddressForBuild(module, this::warningHandler);
+        }
+        return myServerAddress;
       }
     };
   }

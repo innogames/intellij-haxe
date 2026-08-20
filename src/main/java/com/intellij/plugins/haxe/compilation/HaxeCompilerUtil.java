@@ -63,7 +63,16 @@ public class HaxeCompilerUtil
      * The external process is spawned on a pooled thread; this bounds how long the
      * completion thread blocks on {@code Future.get} before giving up.
      */
-    private static final int COMPILER_COMPLETION_TIMEOUT_MS = 10_000;
+    public static final int COMPILER_COMPLETION_TIMEOUT_MS = 10_000;
+
+    /**
+     * Upper bound when the query goes to a compilation server instead of a cold compiler.
+     *
+     * A server handles one request at a time, so a query fired during a build waits for that build
+     * to finish before it is even looked at.  The cold-compiler bound above would trip long before
+     * then and completion would silently return nothing exactly when the server is meant to help.
+     */
+    public static final int COMPILER_COMPLETION_SERVER_TIMEOUT_MS = 120_000;
 
     private static com.intellij.openapi.util.Key messageWindowAutoOpened =
       new com.intellij.openapi.util.Key("messageWindowAutoOpened");
@@ -270,6 +279,22 @@ public class HaxeCompilerUtil
                                         /*modifies*/ List<String> stdout,
                                         /*modifies*/ List<String> stderr,
                                                      HaxeDebugTimeLog timeLog) {
+        return runInterruptibleCompileProcess(command, mixedOutput, dir, sdkData, stdout, stderr, timeLog,
+                                              COMPILER_COMPLETION_TIMEOUT_MS);
+    }
+
+    /**
+     * As above, with an explicit upper bound.  Callers routing through a compilation server need a
+     * bound that tolerates queueing behind a full build.
+     */
+    public static int runInterruptibleCompileProcess(List<String> command,
+                                                     boolean mixedOutput,
+                                                     VirtualFile dir,
+                                                     HaxeSdkAdditionalDataBase sdkData,
+                                        /*modifies*/ List<String> stdout,
+                                        /*modifies*/ List<String> stderr,
+                                                     HaxeDebugTimeLog timeLog,
+                                                     int timeoutMs) {
         // Spawn the external haxe process from a pooled thread so OSProcessHandler.waitFor()
         // runs without a Read Action — that is the only thread state the platform's
         // checkEdtAndReadAction() guard inspects. The completion thread (which DOES hold a
@@ -283,11 +308,11 @@ public class HaxeCompilerUtil
         Future<Integer> future = ApplicationManager.getApplication().executeOnPooledThread(() ->
             HaxeProcessUtil.runProcess(command, mixedOutput, dir, sdkData, stdout, stderr, timeLog, true));
         try {
-            return future.get(COMPILER_COMPLETION_TIMEOUT_MS, TimeUnit.MILLISECONDS);
+            return future.get(timeoutMs, TimeUnit.MILLISECONDS);
         }
         catch (TimeoutException te) {
             future.cancel(true);
-            log.warn("Haxe compiler-completion timed out after " + COMPILER_COMPLETION_TIMEOUT_MS + " ms");
+            log.warn("Haxe compiler-completion timed out after " + timeoutMs + " ms");
             return 124;
         }
         catch (InterruptedException ie) {

@@ -27,6 +27,7 @@ import com.intellij.openapi.progress.ProcessCanceledException;
 import com.intellij.openapi.project.Project;
 import com.intellij.openapi.roots.ModuleRootManager;
 import com.intellij.openapi.vfs.VirtualFile;
+import com.intellij.plugins.haxe.compilation.server.HaxeCompilationServerService;
 import com.intellij.plugins.haxe.config.HaxeConfiguration;
 import com.intellij.plugins.haxe.config.HaxeProjectSettings;
 import com.intellij.plugins.haxe.haxelib.*;
@@ -166,6 +167,10 @@ public class HaxeCompilerServices {
                 //Get module settings
                 HaxeModuleSettings moduleSettings = HaxeModuleSettings.getInstance(moduleForFile);
                 HaxeConfiguration buildConfig = moduleSettings.getBuildConfiguration();
+                // Null unless a compilation server is already up for this module's SDK.  Completion
+                // never starts one itself - see resolveAddressForCompletion.
+                String serverAddress =
+                    HaxeCompilationServerService.getInstance(project).resolveAddressForCompletion(moduleForFile);
                 VirtualFile projectFile = null;
                 switch (buildConfig) {
                     case HXML:
@@ -175,9 +180,15 @@ public class HaxeCompilerServices {
                         }
 
                         commandLineArguments.add(HaxeHelpUtil.getHaxePath(moduleForFile));
+                        addCompilationServerArgs(commandLineArguments, serverAddress);
                         commandLineArguments.add(projectFile.getPath());
 
-                        completions = collectCompletionsFromCompiler(file, element, editor, commandLineArguments, timeLog);
+                        // The hxml is the authoritative define set for this module.  Adding the
+                        // project-settings defines on top would give the query a different define
+                        // signature from the build, and the server caches modules per signature -
+                        // so completion would never reuse anything the build just typed.
+                        completions = collectCompletionsFromCompiler(file, element, editor, commandLineArguments,
+                                                                     timeLog, serverAddress, false);
                         break;
                     case NMML:
                         projectFile = verifyProjectFile(moduleForFile, "NMML", moduleSettings.getNmmlPath(), myErrorNotifier);
@@ -195,15 +206,21 @@ public class HaxeCompilerServices {
                         List<String> compilerArgsFromProjectFile = getLimeProjectConfiguration(moduleForFile, timeLog);
 
                         commandLineArguments.add(HaxeHelpUtil.getHaxePath(moduleForFile));
+                        addCompilationServerArgs(commandLineArguments, serverAddress);
                         formatAndAddCompilerArguments(commandLineArguments, compilerArgsFromProjectFile);
 
-                        completions = collectCompletionsFromCompiler(file, element, editor, commandLineArguments, timeLog);
+                        // No hxml here, so the project-settings defines are still the only place
+                        // some of them come from.  Keep passing them.
+                        completions = collectCompletionsFromCompiler(file, element, editor, commandLineArguments,
+                                                                     timeLog, serverAddress, true);
 
                         break;
                     case CUSTOM:
                         commandLineArguments.add(HaxeHelpUtil.getHaxePath(moduleForFile));
+                        addCompilationServerArgs(commandLineArguments, serverAddress);
                         formatAndAddCompilerArguments(commandLineArguments, moduleSettings.getArguments());
-                        completions = collectCompletionsFromCompiler(file, element, editor, commandLineArguments, timeLog);
+                        completions = collectCompletionsFromCompiler(file, element, editor, commandLineArguments,
+                                                                     timeLog, serverAddress, true);
                         break;
                 }
             }
@@ -217,6 +234,17 @@ public class HaxeCompilerServices {
 
     protected void advertiseError(String message) {
         HaxeCompilerUtil.advertiseError(message, myErrorNotifier);
+    }
+
+    /**
+     * NME completion is not given --connect: it runs "haxelib run nme", which assembles its own
+     * haxe invocation, so the flag would go to the wrong process.
+     */
+    private static void addCompilationServerArgs(List<String> commandLineArguments, @Nullable String serverAddress) {
+        if (serverAddress != null && !serverAddress.isEmpty()) {
+            commandLineArguments.add("--connect");
+            commandLineArguments.add(serverAddress);
+        }
     }
 
     private void formatAndAddCompilerArguments(ArrayList<String> commandLineArguments, List<String> stdout) {
@@ -277,7 +305,9 @@ public class HaxeCompilerServices {
                                                                             @NotNull PsiElement element,
                                                                             @NotNull Editor editor,
                                                                             ArrayList<String> commandLineArguments,
-                                                                            HaxeDebugTimeLog timeLog) {
+                                                                            HaxeDebugTimeLog timeLog,
+                                                                            @Nullable String serverAddress,
+                                                                            boolean includeProjectDefines) {
         // There is a problem here in that the current buffer may not have been saved.
         // If that is the case, then the position is also incorrect, and the compiler
         // doesn't have access to the correct sources.  If the haxe compiler is version 3.4 or
@@ -298,17 +328,23 @@ public class HaxeCompilerServices {
 
         // TODO: Add libraries that could be referenced.
 
-        // Source roots need to be in the classpath, too.
+        // Source roots need to be in the classpath, too.  Class paths are not part of the
+        // compilation server's cache signature, so these are free to add even when the query is
+        // meant to share the build's cached modules.
         for (VirtualFile root : ModuleRootManager.getInstance(moduleForFile).getSourceRoots()) {
             commandLineArguments.add("-cp");
             commandLineArguments.add(root.getPath());
         }
 
         // Add all of the definitions, so that the compiler can see the code we are dealing with.
-        HaxeProjectSettings settings = HaxeProjectSettings.getInstance(project);
-        for (String define : settings.getUserCompilerDefinitions()) {
-            commandLineArguments.add("-D");
-            commandLineArguments.add(define);
+        // Skipped when the build config already carries an authoritative define set: defines *are*
+        // the cache signature, so adding extra ones here would put this query in its own cache.
+        if (includeProjectDefines) {
+            HaxeProjectSettings settings = HaxeProjectSettings.getInstance(project);
+            for (String define : settings.getUserCompilerDefinitions()) {
+                commandLineArguments.add("-D");
+                commandLineArguments.add(define);
+            }
         }
 
         // Tell the compiler we want field completion, adding the type (var or method)
@@ -321,10 +357,14 @@ public class HaxeCompilerServices {
         timeLog.stamp("Calling compiler");
         List<String> stderr = new ArrayList<String>();
         List<String> stdout = new ArrayList<String>();
+        // A server serves one request at a time, so this query may be queued behind a full build.
+        int timeoutMs = serverAddress != null
+                        ? HaxeCompilerUtil.COMPILER_COMPLETION_SERVER_TIMEOUT_MS
+                        : HaxeCompilerUtil.COMPILER_COMPLETION_TIMEOUT_MS;
         int status = HaxeCompilerUtil.runInterruptibleCompileProcess(commandLineArguments, false,
                                                                      HaxeCompilerUtil.findCompileRoot(file),
                                                                      HaxeSdkUtilBase.getSdkData(moduleForFile),
-                                                                     stdout, stderr, timeLog);
+                                                                     stdout, stderr, timeLog, timeoutMs);
 
         timeLog.stamp("Compiler finished. Output found on " + (stdout.isEmpty() ? "" : "stdout ") + (stderr.isEmpty() ? "" : "stderr"));
         // LOG.debug("Compiler finished. Output found on " + (stdout.isEmpty() ? "" : "stdout ") + (stderr.isEmpty() ? "" : "stderr"));

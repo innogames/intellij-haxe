@@ -268,6 +268,17 @@ public class HaxeModuleLevelBuilder extends ModuleLevelBuilder {
       }
 
       @Nullable
+      @Override
+      public String getCompilationServerAddress() {
+        // Always cold-compile here.  The module loop in build() is disabled (see above), so
+        // nothing in the external build process reaches this method; the compilation server
+        // is owned by a project-level service on the IDE side, which is where --connect is
+        // added.  If this builder is ever re-enabled it will behave exactly as it does today
+        // until a port is plumbed through to the build process.
+        return null;
+      }
+
+      @Nullable
       public String getWorkingDirectoryPath() {
         final File baseDirectory = JpsModelSerializationDataService.getBaseDirectory(module);
         return baseDirectory != null ? baseDirectory.getPath() : null;
