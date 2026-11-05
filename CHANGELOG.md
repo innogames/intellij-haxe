@@ -1,21 +1,13 @@
 # Changelog
-## Unreleased
-* Changed: The fork is now its own plugin, `com.innogames.intellij.plugins.haxe` ("Haxe Toolkit Support (InnoGames)"), instead of sharing the marketplace plugin's id. Marketplace releases can no longer replace it, so versions no longer need the `999.` prefix: they are `<upstream version>.<n>`, starting at `1.8.6.1`
-* Note: IntelliJ does not offer this as an update to `999.1.8.6-fork.N`, because it is a different plugin. Uninstall "Haxe Toolkit Support", restart, then install "Haxe Toolkit Support (InnoGames)" from the same plugin repository. Project and SDK settings are kept
+
+## [1.8.6.1] - 2026-11-05
+
+- Changed: The fork is now its own plugin, `com.innogames.intellij.plugins.haxe` ("Haxe Toolkit Support (InnoGames)"), instead of sharing the marketplace plugin's id. Marketplace releases can no longer replace it, so versions no longer need the `999.` prefix: they are `<upstream version>.<n>`, starting at `1.8.6.1`
+- Note: IntelliJ does not offer this as an update to `999.1.8.6-fork.N`, because it is a different plugin. Uninstall "Haxe Toolkit Support", restart, then install "Haxe Toolkit Support (InnoGames)" from the same plugin repository. Project and SDK settings are kept
 
 ## [999.1.8.6-fork.4] - 2026-11-04
 
 - Changed: Released from `innogames/intellij-haxe`, which is now the only place fork builds are published. Point the custom plugin repository at `https://innogames.github.io/intellij-haxe/updatePlugins.xml` and remove any older fork URL. No code changes since `999.1.8.6-fork.3`
-- Added: Builds and compiler completion can go through a warm Haxe compilation server instead of starting a cold compiler every time. Turn it on in Settings → Languages & Frameworks → Haxe with "Compile through a Haxe compilation server". On a large client this takes a full build from ~43s to ~7-13s depending on how much changed. Off by default for this release; the intent is to default it on in the next fork release once the numbers hold in daily use
-- Added: "Restart Haxe Compilation Server" action (Haxe group in the project view and editor popups). Reusing modules across builds can leave the side effects of build macros stale — for example a macro that stamps a version into the output — and this throws that state away without restarting the IDE
-- Added: The server picks a free port by default, so several projects or worktrees open at once stay independent instead of colliding on one port or silently sharing a server. A fixed port can be set in the same settings page. The port in use is written to `.idea/haxe-compilation-server.port` as a single line, so `haxe --connect $(cat .idea/haxe-compilation-server.port) build.hxml` points a terminal build at the same server — add that file to `.gitignore`. "Copy Haxe Compilation Server Port" copies it, and it also appears in the command line echoed to the Build window
-- Note: The compilation server applies to hxml and custom-argument build configurations. Lime/OpenFL and NME builds run through `haxelib run`, which builds its own compiler invocation, so the setting does not affect them
-- Changed: For hxml modules, compiler completion no longer adds the defines from the Haxe project settings on top of the hxml. The hxml is the authoritative define set for those modules, and matching it is what lets completion reuse the modules a build just typed. If completion relied on a project-settings define to see an `#if` branch, move that define into the hxml
-- Bugfix: Two Haxe project settings were wired to each other's fields, so "automatically detect definitions" and "automatically detect code references in console output" each reported the other's value
-- Bugfix: The SDK's "haxelib path" setting now takes effect for compiler invocations. The compiler resolves `-lib` by running whichever `haxelib` it finds on `PATH`, and the SDK home went first — and always holds a stock `haxelib` — so the setting could never win. The configured one now comes first. Projects whose libraries only resolve through a haxelib shim rather than the stock one (lix in scoped mode, for instance) can point the setting at that shim and get libraries resolved for builds, the compilation server, and compiler completion alike. The default the SDK detection writes (`<sdkHome>/haxelib`) names the SDK home either way, so a stock install gets the same `PATH` as before
-- Changed: Removed the upper IDE compatibility bound (`until-build`), so the plugin installs on any IntelliJ build from 261 onward instead of only the 261.x line
-- Merged upstream `develop` (1.8.6) into the fork — see the 1.8.2 to 1.8.6 sections below for the upstream changes (inline XML markup support, HXML parsing and completion fixes, escape-sequence highlighting, and deprecated-API cleanup for IntelliJ 2026.2)
-- Changed: New version scheme `999.<upstream>-fork.<n>` so the fork always takes precedence over the official marketplace plugin
 
 ## [999.1.8.6-fork.3] - 2026-08-24
 
@@ -1585,6 +1577,7 @@ known issues:
 [999.1.8.6-fork.3]: https://github.com/HaxeFoundation/intellij-haxe/compare/999.1.8.6-fork.2...999.1.8.6-fork.3
 [999.1.8.6-fork.2]: https://github.com/HaxeFoundation/intellij-haxe/compare/999.1.8.6-fork.1...999.1.8.6-fork.2
 [999.1.8.6-fork.1]: https://github.com/HaxeFoundation/intellij-haxe/compare/1.8.1-fork.2-dev.5...999.1.8.6-fork.1
+[1.8.6.1]: https://github.com/HaxeFoundation/intellij-haxe/compare/999.1.8.6-fork.4...1.8.6.1
 [0.9]: https://github.com/HaxeFoundation/intellij-haxe/compare/0.8.1.1...0.9
 [0.8.1.1]: https://github.com/HaxeFoundation/intellij-haxe/compare/0.8.1...0.8.1.1
 [0.8]: https://github.com/HaxeFoundation/intellij-haxe/compare/0.7.2...0.8
