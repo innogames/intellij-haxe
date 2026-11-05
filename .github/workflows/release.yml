@@ -53,8 +53,8 @@ jobs:
       - name: Extract IDE compatibility from patched plugin.xml
         id: compat
         run: |
-          PLUGIN_XML=$(find build -name plugin.xml -type f 2>/dev/null | head -1)
-          if [ -z "$PLUGIN_XML" ]; then
+          PLUGIN_XML=build/tmp/patchPluginXml/plugin.xml
+          if [ ! -f "$PLUGIN_XML" ]; then
             echo "::error::plugin.xml not found in build/ — patchPluginXml may not have run"
             exit 1
           fi
@@ -66,8 +66,17 @@ jobs:
             cat "$PLUGIN_XML"
             exit 1
           fi
+          PLUGIN_ID=$(sed -nE 's|.*<id>([^<]+)</id>.*|\1|p' "$PLUGIN_XML" | head -1)
+          PLUGIN_NAME=$(sed -nE 's|.*<name>([^<]+)</name>.*|\1|p' "$PLUGIN_XML" | head -1)
+          PLUGIN_VERSION=$(sed -nE 's|.*<version>([^<]+)</version>.*|\1|p' "$PLUGIN_XML" | head -1)
+          if [ "$PLUGIN_VERSION" != "${{ steps.artifact.outputs.version }}" ]; then
+            echo "::error::Tag $GITHUB_REF_NAME does not match pluginVersion $PLUGIN_VERSION in gradle.properties"
+            exit 1
+          fi
           echo "since=$SINCE" >> "$GITHUB_OUTPUT"
           echo "until=$UNTIL" >> "$GITHUB_OUTPUT"
+          echo "id=$PLUGIN_ID" >> "$GITHUB_OUTPUT"
+          echo "name=$PLUGIN_NAME" >> "$GITHUB_OUTPUT"
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
@@ -88,11 +97,11 @@ jobs:
           <?xml version="1.0" encoding="UTF-8"?>
           <plugins>
             <plugin
-              id="com.intellij.plugins.haxe"
+              id="${{ steps.compat.outputs.id }}"
               url="${DOWNLOAD_URL}"
               version="${{ steps.artifact.outputs.version }}">
               <idea-version since-build="${{ steps.compat.outputs.since }}"${UNTIL_ATTR}/>
-              <name>Haxe Toolkit Support (Fork)</name>
+              <name>${{ steps.compat.outputs.name }}</name>
               <vendor>${GITHUB_REPOSITORY_OWNER}</vendor>
               <description><![CDATA[Custom fork of the Haxe IntelliJ plugin.]]></description>
               <change-notes><![CDATA[Built from ${GITHUB_SHA} by ${GITHUB_WORKFLOW} run #${GITHUB_RUN_NUMBER}.]]></change-notes>

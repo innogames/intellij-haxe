@@ -20,11 +20,14 @@
 
 
 <idea-plugin>
-  <id>com.intellij.plugins.haxe</id>
-  <name>Haxe Toolkit Support</name>
+  <id>com.innogames.intellij.plugins.haxe</id>
+  <name>Haxe Toolkit Support (InnoGames)</name>
 
   <vendor>Haxe Community (Original sources provided by JetBrains.)</vendor>
   <idea-version since-build="@plugin.installable.since@" until-build="@plugin.installable.until@"/>
+
+  <!-- Same file types and extensions as the marketplace plugin, so the two must never load together. -->
+  <incompatible-with>com.intellij.plugins.haxe</incompatible-with>
 
   <depends>com.intellij.modules.lang</depends>
   <depends>com.intellij.modules.java</depends>

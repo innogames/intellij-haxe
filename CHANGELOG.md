@@ -1,4 +1,7 @@
 # Changelog
+## Unreleased
+* Changed: The fork is now its own plugin, `com.innogames.intellij.plugins.haxe` ("Haxe Toolkit Support (InnoGames)"), instead of sharing the marketplace plugin's id. Marketplace releases can no longer replace it, so versions no longer need the `999.` prefix: they are `<upstream version>.<n>`, starting at `1.8.6.1`
+* Note: IntelliJ does not offer this as an update to `999.1.8.6-fork.N`, because it is a different plugin. Uninstall "Haxe Toolkit Support", restart, then install "Haxe Toolkit Support (InnoGames)" from the same plugin repository. Project and SDK settings are kept
 
 ## [999.1.8.6-fork.4] - 2026-11-04
 

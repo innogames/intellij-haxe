@@ -132,7 +132,7 @@ intellijPlatform {
 
 
     pluginVerification(fun IntelliJPlatformExtension.PluginVerification.() {
-        freeArgs = listOf("-mute", "TemplateWordInPluginId,ForbiddenPluginIdPrefix")
+        freeArgs = listOf("-mute", "TemplateWordInPluginId")
         failureLevel = listOf(
 //            VerifyPluginTask.FailureLevel.MISSING_DEPENDENCIES
         )

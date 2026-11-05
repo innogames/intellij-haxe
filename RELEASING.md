@@ -1,90 +1,60 @@
-# Releasing the Haxe IntelliJ Plugin (fork)
+# Releasing the Haxe IntelliJ Plugin (InnoGames fork)
 
-> **Current practice (since July 2026):** releases use the version scheme
-> `999.<upstream-version>-fork.<n>` (e.g. `999.1.8.6-fork.1`), superseding the suffix-only scheme
-> in the "Versioning strategy" section below. The `999.` prefix makes every fork release compare
-> higher than any marketplace version, which eliminates the "marketplace catch-up problem"
-> described there. Keep the shape identical for every release: bump `<n>` for fork-only changes,
-> reset it to `.1` after an upstream sync. Everything else in this document still applies —
-> substitute the new format in the example commands.
+The fork is released from `innogames/intellij-haxe` through a **custom plugin repository** on GitHub Pages, not the JetBrains Marketplace. Pushing a `v*` tag runs `.github/workflows/release.yml`, which builds the plugin, publishes a GitHub Release with the ZIP attached, and deploys `https://innogames.github.io/intellij-haxe/updatePlugins.xml`, the URL colleagues add in IntelliJ.
 
-This fork ships builds to downstream IntelliJ users through a **custom plugin repository** hosted on GitHub Pages, instead of the JetBrains Marketplace. Pushing a `v*` git tag triggers `.github/workflows/release.yml`, which builds the plugin, publishes a GitHub Release with the ZIP attached, and updates `https://<owner>.github.io/<repo>/updatePlugins.xml` so consumer IntelliJ instances see the new build.
+> **Note:** `release.yaml` (triggered by `release-X.Y.Z` tags) is the upstream marketplace flow and is unrelated. Fork releases use `v*` tags only.
 
-> **Note:** the existing `release.yaml` workflow (triggered by `release-X.Y.Z` tags) is the upstream marketplace flow and is independent of this. Use the `v*` flow described here for fork releases.
+## Plugin id and versioning
+
+The fork is its own plugin: id `com.innogames.intellij.plugins.haxe`, name "Haxe Toolkit Support (InnoGames)". It declares `<incompatible-with>com.intellij.plugins.haxe</incompatible-with>`, because both register the same Haxe file types and extensions.
+
+Because the id differs from the marketplace plugin's, a marketplace release is never offered as an update to the fork, so the version only has to sort correctly against earlier fork releases:
+
+- **Scheme:** `<upstream version>.<n>`, all numeric, e.g. `1.8.6.1`, `1.8.6.2`.
+- Bump `<n>` for fork-only changes. After merging a new upstream release, restart at `.1` (`1.8.7.1`).
+- Keep it numeric. A word suffix (`-fork.1`, `-inno.1`) may be ranked as a pre-release by IntelliJ's version comparison.
+- Never reuse a version or a tag. If a release fails partway, bump and tag again.
+
+Releases up to `999.1.8.6-fork.4` used the marketplace id with a `999.` prefix to sort above upstream. IntelliJ does not offer `1.8.6.1` as an update to those, since it is a different plugin: users uninstall "Haxe Toolkit Support" once and install "Haxe Toolkit Support (InnoGames)".
 
 ## One-time repository configuration
 
-These steps cannot be done from a workflow — apply them once via the GitHub web UI:
+Already done for `innogames/intellij-haxe`. Needed again only for a new repository:
 
-1. **Enable GitHub Pages with "GitHub Actions" as the source.**
-   Settings → Pages → Build and deployment → Source: **GitHub Actions**.
-2. **Confirm Actions has write permissions.**
-   Settings → Actions → General → Workflow permissions: **Read and write permissions** (or rely on the per-workflow `permissions:` block, which already grants `contents: write`, `pages: write`, `id-token: write`).
-3. **(Optional) Protect the `v*` tag pattern.**
-   Settings → Tags → add a protection rule for `v*` if you want releases to require code review.
-
-## Versioning strategy
-
-Use the suffix scheme `<upstream-version>-fork.<n>`, e.g. `1.8.1-fork.3`.
-
-**Why:** IntelliJ compares plugin versions string-wise with version-aware logic. The fork version must compare *higher* than whatever the marketplace publishes for the same `id` (`com.intellij.plugins.haxe`), or IntelliJ will offer the marketplace build as an "update" and silently revert users to upstream.
-
-**Rules:**
-
-- When you sync to a new upstream version, reset the suffix: `1.8.2-fork.1`.
-- For fork-only changes between syncs, increment the suffix: `1.8.1-fork.1` → `1.8.1-fork.2`.
-- Never reuse a tag — if a release fails partway, bump and re-tag.
-
-**The marketplace catch-up problem:** if upstream cuts `1.8.2` and you're still on `1.8.1-fork.5`, marketplace's `1.8.2` is now *higher*. Two mitigations:
-
-- Sync to upstream and re-release (`1.8.2-fork.1`) promptly.
-- Tell users to disable marketplace updates for this plugin once installed (Plugins → installed plugin → ⚙ → Disable update for this plugin).
+1. **Pages:** Settings → Pages → Source: **GitHub Actions**. Ignore the suggested starter workflows; `release.yml` is the workflow.
+2. **`github-pages` environment:** it appears after the first deploy attempt. Under Settings → Environments → `github-pages` → Deployment branches and tags, allow only the **tag** pattern `v*`, with no branch rule. The version is read from the tag name, so a run from a branch would publish a version named after the branch.
+3. **Default branch:** `develop`.
 
 ## Cutting a release
 
-1. Sync with upstream and apply fork patches if they aren't already on top:
+1. On a branch off `develop`, bump `pluginVersion` in `gradle.properties`, put the release notes under `## Unreleased` in `CHANGELOG.md`, and run `./gradlew patchChangelog`. Check the new version section afterwards: it should contain only this release's items.
+2. `./gradlew clean build verifyPlugin` must pass.
+3. Commit (`Release <version>`), fast-forward `develop` to it and push `develop`.
+4. Tag that commit and push **only that tag**, by name:
    ```
-   git fetch upstream
-   git merge upstream/master
+   git tag v1.8.6.1
+   git push <org remote> v1.8.6.1
    ```
-2. Bump `pluginVersion` in `gradle.properties` per the versioning strategy above.
-3. Commit the bump:
-   ```
-   git commit -am "Release v1.8.1-fork.N"
-   ```
-4. Tag and push:
-   ```
-   git tag v1.8.1-fork.N
-   git push origin develop --tags
-   ```
-5. Watch the **Actions** tab. On success:
-   - A new GitHub Release `v1.8.1-fork.N` exists with the plugin ZIP attached.
-   - `https://<owner>.github.io/<repo>/updatePlugins.xml` reflects the new version.
-   - IntelliJ instances with the custom repo configured surface an update notification on the next "Check for Plugin Updates" or restart.
+   Never `--tags` or `--follow-tags`: local clones carry old tags from the personal forks.
+5. Watch **Actions → Release plugin**. On success the GitHub Release has the ZIP and `updatePlugins.xml` offers the new version.
 
-To re-run a failed release without re-tagging, use **Actions → Release plugin → Run workflow** (`workflow_dispatch`) and pick the same tag from the dropdown.
+The workflow fails early if the tag does not match `pluginVersion`.
 
-## Verification — first successful run
+**Re-running a failed release:** start a new run with **Run workflow**, choosing the tag under **Tags**. Don't use "Re-run jobs" on a run that already uploaded the Pages artifact: the re-run uploads a second one and `deploy-pages` fails with `Multiple artifacts named "github-pages"`.
 
-1. **Release exists:** visit `https://github.com/<owner>/<repo>/releases/tag/v<version>` and confirm the `.zip` is attached.
-2. **Pages is live:** visit `https://<owner>.github.io/<repo>/updatePlugins.xml` — should return XML, not 404. (First Pages activation can take 5–10 minutes.)
-3. **XML parses:**
-   ```
-   curl -fsSL https://<owner>.github.io/<repo>/updatePlugins.xml | xmllint --noout -
-   ```
-4. **Download URL resolves:**
-   ```
-   curl -fsSLI "$(curl -s https://<owner>.github.io/<repo>/updatePlugins.xml | sed -nE 's/.*url="([^"]+)".*/\1/p')"
-   ```
-   Should return `HTTP/2 200` after redirects.
-5. **End-to-end IntelliJ test:** Settings → Plugins → ⚙ → Manage Plugin Repositories → **+** → add the Pages URL → restart → confirm the fork shows up in the **Marketplace** tab with the latest tag's version.
+## Verification
+
+```
+curl -s https://innogames.github.io/intellij-haxe/updatePlugins.xml
+curl -fsSLI "$(curl -s https://innogames.github.io/intellij-haxe/updatePlugins.xml | sed -nE 's/.*url="([^"]+)".*/\1/p')" | head -1
+```
+
+The first shows the offered id and version, the second should end in `200`. Then in IntelliJ: Settings → Plugins → ⚙ → Check for Updates.
 
 ## Gotchas
 
-- **First release is the noisy one.** GitHub Pages first activation can take 5–10 minutes. Subsequent deploys are fast.
-- **Plugin id must equal `com.intellij.plugins.haxe`.** Same id is what makes the fork an *update* of the marketplace plugin rather than a coexisting one. Don't change it to disambiguate.
-- **`since-build` / `until-build` are sourced from `gradle.properties`** (`pluginSinceBuild`, `pluginUntilBuild`) via `patchPluginXml`; the workflow extracts them from the patched `plugin.xml` so the `updatePlugins.xml` stays in sync. Don't drift the values manually.
-- **The plugin ZIP filename includes the version.** Don't hardcode it anywhere — the workflow discovers it from `build/distributions/`.
-- **`workflow_dispatch` is intentional.** It lets you re-run a release manually if the Pages deploy fails transiently.
-- **Don't add `paths:` filters to the trigger.** Tag-based triggers don't respect path filters predictably.
-- **Caching Gradle:** `gradle/actions/setup-gradle@v4` caches by default. If a build is flaky on stale cache, add `cache-disabled: true` temporarily.
+- **First Pages deploy** can take 5–10 minutes to go live.
+- **`since-build` / `until-build`** come from `gradle.properties` via `patchPluginXml`. The workflow reads id, name, version and build range from `build/tmp/patchPluginXml/plugin.xml`, so `updatePlugins.xml` always matches the ZIP.
+- **The ZIP name** is discovered by the workflow. Don't hardcode it.
+- **Don't add `paths:` filters** to the tag trigger.
+- **Gradle cache:** `gradle/actions/setup-gradle@v4` caches by default. On a build that is flaky from a stale cache, set `cache-disabled: true` temporarily.
